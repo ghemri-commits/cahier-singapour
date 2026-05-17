@@ -2779,6 +2779,7 @@ function NumberBondsLesson({ lesson, kid, onComplete, onExit }) {
   const [practiceResults, setPracticeResults] = useState([]);
   const [currentInput, setCurrentInput] = useState('');
   const [feedback, setFeedback] = useState(null);
+  const [wrongAttempts, setWrongAttempts] = useState(0);
 
   // Reset cubes manipulable signal
   const [resetCubes, setResetCubes] = useState(0);
@@ -2794,7 +2795,7 @@ function NumberBondsLesson({ lesson, kid, onComplete, onExit }) {
           total: n,
           shown: showLeft ? 'left' : 'right',
           shownValue: showLeft ? part : n - part,
-          answer: n - part,
+          answer: showLeft ? n - part : part,  // The unknown is the OTHER part, not what's shown
         });
       }
     }
@@ -2803,9 +2804,15 @@ function NumberBondsLesson({ lesson, kid, onComplete, onExit }) {
 
   const checkPracticeAnswer = () => {
     const prob = practiceProblems[practiceIdx];
+    // Defensive: skip if no problem or empty input
+    if (!prob || !currentInput) return;
     const ans = parseInt(currentInput, 10);
-    if (ans === prob.answer) {
+    if (isNaN(ans)) return;
+    // Use Number() to ensure clean numeric comparison
+    const expectedAnswer = Number(prob.answer);
+    if (ans === expectedAnswer) {
       setFeedback('correct');
+      setWrongAttempts(0);
       setPracticeResults(r => [...r, { ...prob, given: ans, correct: true }]);
       setTimeout(() => {
         setFeedback(null);
@@ -2815,9 +2822,13 @@ function NumberBondsLesson({ lesson, kid, onComplete, onExit }) {
       }, 900);
     } else {
       setFeedback('wrong');
+      setWrongAttempts(w => w + 1);
       setTimeout(() => { setFeedback(null); setCurrentInput(''); }, 1000);
     }
   };
+
+  // Reset wrongAttempts when moving to next problem
+  useEffect(() => { setWrongAttempts(0); }, [practiceIdx]);
 
   const correctCount = practiceResults.filter(r => r.correct).length;
   const isPerfect = correctCount === practiceProblems.length;
@@ -2974,15 +2985,26 @@ function NumberBondsLesson({ lesson, kid, onComplete, onExit }) {
         {phase === 'pratique' && (
           <div>
             <LessonBanner stepLabel="Étape 4 · Pratique"
-              instruction={`Trouve la partie manquante. Question ${practiceIdx + 1} sur ${practiceProblems.length}.`}
+              instruction={`Trouve le nombre qui va dans le cercle vide. Question ${practiceIdx + 1} sur ${practiceProblems.length}.`}
               accent={c.strong} soft={c.soft} kidPrefs={kidPrefs} autoReadKey={`pract-${practiceIdx}`} />
 
             <div className="bg-white rounded-3xl border-2 border-stone-200 p-8 text-center">
               {(() => {
                 const p = practiceProblems[practiceIdx];
+                // Defensive: ensure we have a valid problem
+                if (!p) return <div className="text-stone-500">Chargement…</div>;
+                const userNum = parseInt(currentInput, 10);
+                const hasInput = currentInput.length > 0;
+                const isUnknownLeft = p.shown === 'right';   // Si le donné est à droite, l'inconnu est à gauche
+                const isUnknownRight = p.shown === 'left';   // Si le donné est à gauche, l'inconnu est à droite
+                const knownValue = p.shownValue;
+                const expectedAnswer = p.answer;
+
                 return (
                   <div>
+                    {/* Number bond visual */}
                     <div className="flex items-center justify-center gap-4">
+                      {/* Big total circle on left */}
                       <div className="w-20 h-20 rounded-full flex items-center justify-center font-display text-3xl font-bold text-white"
                         style={{ background: c.ink }}>{p.total}</div>
                       <svg width="40" height="60" viewBox="0 0 40 60">
@@ -2990,35 +3012,65 @@ function NumberBondsLesson({ lesson, kid, onComplete, onExit }) {
                         <path d={`M 5 30 Q 20 30 35 50`} stroke={c.ink} strokeWidth="2" fill="none" opacity="0.4" />
                       </svg>
                       <div className="flex flex-col gap-3">
-                        <div className="w-16 h-16 rounded-full flex items-center justify-center font-display text-2xl font-bold border-2"
-                          style={{
-                            borderColor: p.shown === 'left' ? c.ink : c.accent,
-                            color: p.shown === 'left' ? c.ink : c.strong,
-                            background: p.shown === 'left' ? c.soft : 'white',
-                          }}>
+                        {/* TOP circle: shown when shown='left', else unknown */}
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center font-display text-2xl font-bold relative"
+                          style={
+                            p.shown === 'left'
+                              ? { background: c.ink, color: 'white', border: `3px solid ${c.ink}` }
+                              : {
+                                  background: hasInput ? c.soft : 'white',
+                                  color: feedback === 'wrong' ? '#dc2626' : (hasInput ? c.ink : '#9ca3af'),
+                                  border: `3px dashed ${feedback === 'wrong' ? '#dc2626' : c.ink}`,
+                                  animation: !hasInput ? 'pulseRing 1.6s ease-in-out infinite' : 'none',
+                                }
+                          }>
                           {p.shown === 'left' ? p.shownValue : (currentInput || '?')}
+                          {p.shown === 'left' && (
+                            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center">✓</span>
+                          )}
                         </div>
-                        <div className="w-16 h-16 rounded-full flex items-center justify-center font-display text-2xl font-bold border-2"
-                          style={{
-                            borderColor: p.shown === 'right' ? c.ink : c.accent,
-                            color: p.shown === 'right' ? c.ink : c.strong,
-                            background: p.shown === 'right' ? c.soft : 'white',
-                          }}>
+                        {/* BOTTOM circle: shown when shown='right', else unknown */}
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center font-display text-2xl font-bold relative"
+                          style={
+                            p.shown === 'right'
+                              ? { background: c.ink, color: 'white', border: `3px solid ${c.ink}` }
+                              : {
+                                  background: hasInput ? c.soft : 'white',
+                                  color: feedback === 'wrong' ? '#dc2626' : (hasInput ? c.ink : '#9ca3af'),
+                                  border: `3px dashed ${feedback === 'wrong' ? '#dc2626' : c.ink}`,
+                                  animation: !hasInput ? 'pulseRing 1.6s ease-in-out infinite' : 'none',
+                                }
+                          }>
                           {p.shown === 'right' ? p.shownValue : (currentInput || '?')}
+                          {p.shown === 'right' && (
+                            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center">✓</span>
+                          )}
                         </div>
                       </div>
                     </div>
-                    <div className="mt-6 font-display text-2xl tabular-nums">
-                      <span style={{ color: c.ink }}>{p.total}</span>
-                      <span className="text-stone-400 mx-2">=</span>
-                      <span style={{ color: p.shown === 'left' ? c.ink : c.strong }}>
-                        {p.shown === 'left' ? p.shownValue : (currentInput || '?')}
-                      </span>
-                      <span className="text-stone-400 mx-2">+</span>
-                      <span style={{ color: p.shown === 'right' ? c.ink : c.strong }}>
-                        {p.shown === 'right' ? p.shownValue : (currentInput || '?')}
+
+                    {/* Arrow + clear hint */}
+                    <div className="mt-4 text-sm text-stone-600">
+                      <span style={{ color: c.strong }}>
+                        ↑ Tape le nombre qui complète : <b>{p.total} = {knownValue} + ?</b>
                       </span>
                     </div>
+
+                    {/* Hint after 2 wrong attempts */}
+                    {wrongAttempts >= 2 && wrongAttempts < 4 && (
+                      <div className="mt-3 rounded-xl p-3 text-sm" style={{ background: '#fef3c7', color: '#78350f' }}>
+                        💡 Astuce : combien faut-il ajouter à <b>{knownValue}</b> pour faire <b>{p.total}</b> ?<br/>
+                        Réponse : <b>{p.total} − {knownValue} = ?</b>
+                      </div>
+                    )}
+
+                    {/* Show answer after 4 wrong attempts */}
+                    {wrongAttempts >= 4 && (
+                      <div className="mt-3 rounded-xl p-3 text-sm" style={{ background: '#dbeafe', color: '#1e40af' }}>
+                        La bonne réponse est <b>{expectedAnswer}</b>. Tape ce nombre pour continuer.
+                      </div>
+                    )}
+
                     {feedback && (
                       <div className={`mt-4 inline-block px-4 py-2 rounded-full font-medium text-sm ${
                         feedback === 'correct' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
@@ -3030,10 +3082,24 @@ function NumberBondsLesson({ lesson, kid, onComplete, onExit }) {
                 );
               })()}
             </div>
+
+            <style>{`
+              @keyframes pulseRing {
+                0%, 100% { box-shadow: 0 0 0 0 ${c.ink}40; }
+                50% { box-shadow: 0 0 0 10px ${c.ink}00; }
+              }
+            `}</style>
+
             <div className="mt-6">
-              <NumPad onDigit={(d) => setCurrentInput(s => (s + d).slice(0, 2))}
-                onClear={() => setCurrentInput(s => s.slice(0, -1))}
-                onSubmit={checkPracticeAnswer} accent={c.ink} />
+              <NumPad
+                onDigit={(d) => {
+                  // If feedback is showing, clear and start fresh
+                  if (feedback) { setFeedback(null); setCurrentInput(d); return; }
+                  setCurrentInput(s => (s + d).slice(0, 2));
+                }}
+                onClear={() => { setFeedback(null); setCurrentInput(s => s.slice(0, -1)); }}
+                onSubmit={checkPracticeAnswer}
+                accent={c.ink} />
             </div>
           </div>
         )}
