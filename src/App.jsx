@@ -352,6 +352,38 @@ const shuffle = (rng, arr) => {
   return a;
 };
 
+// ============================================================
+// PRACTICE BATCH GENERATION
+// ============================================================
+// 50 exercises per lesson, randomized at each new session.
+// Difficulty progression: 30% easy / 40% medium / 30% hard.
+// A lesson is never "completed" — it's always practicable.
+const PRACTICE_COUNT = 50;
+
+// Builds a difficulty-graded batch from a generator function.
+// makeProblem(rng, difficulty) where difficulty is 'easy' | 'medium' | 'hard'
+function generatePracticeBatch(seed, makeProblem) {
+  const r = rng(seed);
+  const easyCount = 15;
+  const mediumCount = 20;
+  const hardCount = 15;
+  const probs = [];
+  for (let i = 0; i < easyCount; i++) probs.push(makeProblem(r, 'easy'));
+  for (let i = 0; i < mediumCount; i++) probs.push(makeProblem(r, 'medium'));
+  for (let i = 0; i < hardCount; i++) probs.push(makeProblem(r, 'hard'));
+  return probs;
+}
+
+// Returns a session seed that changes when the kid starts a new practice
+// (so they don't see the same 50 every time). Combines lesson id and
+// session counter from progress.
+function getPracticeSeed(lessonId, sessionCount) {
+  let h = 0;
+  const s = lessonId + '_s' + (sessionCount || 0);
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
 function findLesson(lessonId) {
   for (const grade of CURRICULUM) {
     for (const unit of grade.units) {
@@ -2785,21 +2817,35 @@ function NumberBondsLesson({ lesson, kid, onComplete, onExit }) {
   const [resetCubes, setResetCubes] = useState(0);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(activeNumber * 100 + (lesson.id?.charCodeAt(0) || 1));
-    const probs = [];
-    for (const n of focusNumbers) {
-      for (let trial = 0; trial < 4; trial++) {
-        const part = rndInt(r, 1, n - 1);
-        const showLeft = r() > 0.5;
-        probs.push({
-          total: n,
-          shown: showLeft ? 'left' : 'right',
-          shownValue: showLeft ? part : n - part,
-          answer: showLeft ? n - part : part,  // The unknown is the OTHER part, not what's shown
-        });
+    // Session seed: new exercises each time the kid starts practicing.
+    // Math.floor(Date.now()/1000) changes every second, but useMemo caches it
+    // for the entire lifecycle of the lesson — so 50 stable exercises per session.
+    const seed = Math.floor(Date.now() / 1000) + (lesson.id?.charCodeAt(0) || 1) + activeNumber;
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      // Difficulty controls which numbers we draw from
+      let pool;
+      if (difficulty === 'easy') {
+        pool = focusNumbers.filter(n => n <= 5);
+        if (pool.length === 0) pool = focusNumbers.slice(0, Math.max(1, Math.ceil(focusNumbers.length / 2)));
+      } else if (difficulty === 'medium') {
+        pool = focusNumbers;
+      } else {
+        pool = focusNumbers.filter(n => n >= 5);
+        if (pool.length === 0) pool = focusNumbers;
       }
-    }
-    return shuffle(r, probs).slice(0, 6);
+      const n = pick(r, pool);
+      const part = difficulty === 'hard'
+        ? (r() > 0.5 ? 1 : n - 1)
+        : rndInt(r, 1, n - 1);
+      const showLeft = r() > 0.5;
+      return {
+        total: n,
+        shown: showLeft ? 'left' : 'right',
+        shownValue: showLeft ? part : n - part,
+        answer: showLeft ? n - part : part,
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusNumbers, activeNumber, lesson.id]);
 
   const checkPracticeAnswer = () => {
@@ -3308,18 +3354,21 @@ function DoublesLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0));
-    const probs = [];
-    for (let i = 0; i < 8; i++) {
-      const n = rndInt(r, 2, lesson.max || 10);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0);
+    const maxN = lesson.max || 10;
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      const range = difficulty === 'easy'
+        ? [2, Math.min(5, maxN)]
+        : difficulty === 'medium'
+        ? [2, maxN]
+        : [Math.max(3, Math.floor(maxN / 2)), maxN];
+      const n = rndInt(r, range[0], range[1]);
       if (isNear) {
-        // n + (n+1) = 2n+1
-        probs.push({ a: n, b: n + 1, answer: n + n + 1, type: 'near' });
-      } else {
-        probs.push({ a: n, b: n, answer: n * 2, type: 'double' });
+        return { a: n, b: n + 1, answer: n + n + 1, type: 'near' };
       }
-    }
-    return probs;
+      return { a: n, b: n, answer: n * 2, type: 'double' };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, isNear]);
 
   const checkAnswer = () => {
@@ -3480,14 +3529,23 @@ function MakeTenLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) * 100);
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
-      const a = rndInt(r, 6, 9);
-      const b = rndInt(r, 11 - a, 9);
-      probs.push({ a, b, answer: a + b });
-    }
-    return probs;
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) * 100;
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      // a is the larger addend (closer to 10), b makes the bridge
+      let a, b;
+      if (difficulty === 'easy') {
+        a = rndInt(r, 8, 9);  // close to 10, easy bridge
+        b = rndInt(r, 11 - a, 5);
+      } else if (difficulty === 'medium') {
+        a = rndInt(r, 6, 9);
+        b = rndInt(r, 11 - a, 7);
+      } else {
+        a = rndInt(r, 6, 9);
+        b = rndInt(r, 11 - a, 9);
+      }
+      return { a, b, answer: a + b };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id]);
 
   const checkAnswer = () => {
@@ -3680,18 +3738,28 @@ function PartWholeLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 50);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 50;
     const max = lesson.max || 10;
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
-      const whole = rndInt(r, 5, max);
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      // Difficulty adjusts the size of the whole
+      let wholeMin, wholeMax;
+      if (difficulty === 'easy') {
+        wholeMin = 3;
+        wholeMax = Math.min(7, max);
+      } else if (difficulty === 'medium') {
+        wholeMin = 5;
+        wholeMax = max;
+      } else {
+        wholeMin = Math.max(7, Math.floor(max / 2));
+        wholeMax = max;
+      }
+      const whole = rndInt(r, wholeMin, wholeMax);
       const part1 = rndInt(r, 1, whole - 1);
       const part2 = whole - part1;
-      // unknown: 0 (part1) or 1 (part2) or 'whole'
-      const unknownChoice = isFamily ? rndInt(r, 0, 2) : 0; // family: any can be unknown
-      probs.push({ whole, part1, part2, unknown: unknownChoice === 2 ? 'whole' : unknownChoice });
-    }
-    return probs;
+      const unknownChoice = isFamily ? rndInt(r, 0, 2) : 0;
+      return { whole, part1, part2, unknown: unknownChoice === 2 ? 'whole' : unknownChoice };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, isFamily]);
 
   const getAnswer = (p) => p.unknown === 'whole' ? p.whole : p.unknown === 0 ? p.part1 : p.part2;
@@ -3821,31 +3889,42 @@ function NumberLineLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 30);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 30;
     const max = lesson.max || 20;
-    const probs = [];
     if (isSkip) {
-      // Show "what comes next" : 2, 4, 6, ?, ?
-      for (let i = 0; i < 6; i++) {
-        const step = pick(r, max <= 100 ? [2, 5, 10] : [10, 100]);
-        const startMultiple = rndInt(r, 1, Math.floor(max / step) - 4);
+      return generatePracticeBatch(seed, (r, difficulty) => {
+        const stepOptions = max <= 100 ? [2, 5, 10] : [10, 100];
+        let step;
+        if (difficulty === 'easy') step = stepOptions[0];
+        else if (difficulty === 'medium') step = pick(r, stepOptions);
+        else step = stepOptions[stepOptions.length - 1];
+        const maxStart = Math.max(1, Math.floor(max / step) - 4);
+        const startMultiple = rndInt(r, 1, maxStart);
         const seq = Array.from({ length: 4 }, (_, i) => (startMultiple + i) * step);
-        probs.push({ seq, step, answer: (startMultiple + 4) * step });
-      }
+        return { seq, step, answer: (startMultiple + 4) * step };
+      });
     } else if (isSub) {
-      for (let i = 0; i < 6; i++) {
-        const a = rndInt(r, 8, max);
+      return generatePracticeBatch(seed, (r, difficulty) => {
+        let aMin, aMax;
+        if (difficulty === 'easy') { aMin = 5; aMax = Math.min(15, max); }
+        else if (difficulty === 'medium') { aMin = 8; aMax = max; }
+        else { aMin = Math.max(10, Math.floor(max / 2)); aMax = max; }
+        const a = rndInt(r, aMin, aMax);
         const b = rndInt(r, 1, a - 1);
-        probs.push({ a, b, answer: a - b });
-      }
+        return { a, b, answer: a - b };
+      });
     } else {
-      for (let i = 0; i < 6; i++) {
-        const a = rndInt(r, 2, max - 5);
+      return generatePracticeBatch(seed, (r, difficulty) => {
+        let aMin, aMax;
+        if (difficulty === 'easy') { aMin = 2; aMax = Math.min(8, max - 5); }
+        else if (difficulty === 'medium') { aMin = 2; aMax = max - 5; }
+        else { aMin = Math.max(5, Math.floor(max / 2)); aMax = max - 2; }
+        const a = rndInt(r, aMin, aMax);
         const b = rndInt(r, 1, Math.min(9, max - a));
-        probs.push({ a, b, answer: a + b });
-      }
+        return { a, b, answer: a + b };
+      });
     }
-    return probs;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, isSkip, isSub]);
 
   const checkAnswer = () => {
@@ -3998,13 +4077,16 @@ function Base10IntroLesson({ lesson, kid, onComplete, onExit }) {
   const [practiceValue, setPracticeValue] = useState(0);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 70);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 70;
     const max = lesson.max || 100;
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
-      probs.push({ target: rndInt(r, 11, max - 1) });
-    }
-    return probs;
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      let min, top;
+      if (difficulty === 'easy') { min = 11; top = Math.min(30, max - 1); }
+      else if (difficulty === 'medium') { min = 11; top = max - 1; }
+      else { min = Math.max(40, Math.floor(max / 2)); top = max - 1; }
+      return { target: rndInt(r, min, top) };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max]);
 
   const checkAnswer = () => {
@@ -4128,20 +4210,24 @@ function ComparisonLesson({ lesson, kid, onComplete, onExit }) {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 110);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 110;
     const max = lesson.max || 100;
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
-      const a = rndInt(r, 1, max);
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      let aMax;
+      if (difficulty === 'easy') aMax = Math.min(20, max);
+      else if (difficulty === 'medium') aMax = Math.min(50, max);
+      else aMax = max;
+      const a = rndInt(r, 1, aMax);
       let b;
-      if (i === 5) b = a; // include one equal case
+      // ~15% chance of equality case
+      if (r() < 0.15) b = a;
       else {
-        b = rndInt(r, 1, max);
-        while (b === a) b = rndInt(r, 1, max);
+        b = rndInt(r, 1, aMax);
+        while (b === a) b = rndInt(r, 1, aMax);
       }
-      probs.push({ a, b, answer: a > b ? '>' : a < b ? '<' : '=' });
-    }
-    return probs;
+      return { a, b, answer: a > b ? '>' : a < b ? '<' : '=' };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max]);
 
   const checkAnswer = (choice) => {
@@ -4272,29 +4358,36 @@ function MoneyLesson({ lesson, kid, onComplete, onExit }) {
   const [moneySelection, setMoneySelection] = useState({ selection: {}, total: 0 });
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 130);
-    const probs = [];
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 130;
     const maxV = lesson.max || 100;
     if (isIdentify) {
       const coins = lesson.max <= 25 ? COINS.slice(0, 4) : COINS;
-      for (let i = 0; i < 6; i++) {
+      return generatePracticeBatch(seed, (r) => {
         const coin = pick(r, coins);
-        probs.push({ coin, type: 'identify', answer: coin.value });
-      }
+        return { coin, type: 'identify', answer: coin.value };
+      });
     } else if (isCount || isCombine) {
-      for (let i = 0; i < 6; i++) {
-        // Generate a random total amount within max
-        const target = rndInt(r, 5, maxV);
-        probs.push({ target, type: isCount ? 'count' : 'combine' });
-      }
+      return generatePracticeBatch(seed, (r, difficulty) => {
+        let min, top;
+        if (difficulty === 'easy') { min = 5; top = Math.min(25, maxV); }
+        else if (difficulty === 'medium') { min = 10; top = Math.min(50, maxV); }
+        else { min = 20; top = maxV; }
+        const target = rndInt(r, min, top);
+        return { target, type: isCount ? 'count' : 'combine' };
+      });
     } else if (isChange) {
-      for (let i = 0; i < 6; i++) {
-        const price = rndInt(r, 10, maxV - 50);
+      return generatePracticeBatch(seed, (r, difficulty) => {
+        let priceMin, priceMax;
+        if (difficulty === 'easy') { priceMin = 10; priceMax = Math.min(30, maxV - 20); }
+        else if (difficulty === 'medium') { priceMin = 10; priceMax = maxV - 50; }
+        else { priceMin = Math.max(20, Math.floor(maxV / 3)); priceMax = maxV - 50; }
+        const price = rndInt(r, priceMin, priceMax);
         const given = price + rndInt(r, 5, Math.min(100, maxV - price));
-        probs.push({ price, given, answer: given - price, type: 'change' });
-      }
+        return { price, given, answer: given - price, type: 'change' };
+      });
     }
-    return probs;
+    return [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, isIdentify, isCount, isCombine, isChange]);
 
   const checkAnswer = (val) => {
@@ -4452,13 +4545,17 @@ function MeasureLengthLesson({ lesson, kid, onComplete, onExit }) {
   const [currentInput, setCurrentInput] = useState('');
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 150);
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
-      const lengthCm = rndInt(r, 3, Math.min(30, lesson.max || 30));
-      probs.push({ lengthCm, answer: lengthCm });
-    }
-    return probs;
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 150;
+    const maxLen = Math.min(30, lesson.max || 30);
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      let min, top;
+      if (difficulty === 'easy') { min = 3; top = Math.min(10, maxLen); }
+      else if (difficulty === 'medium') { min = 5; top = Math.min(20, maxLen); }
+      else { min = 10; top = maxLen; }
+      const lengthCm = rndInt(r, min, top);
+      return { lengthCm, answer: lengthCm };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max]);
 
   const checkAnswer = () => {
@@ -4590,17 +4687,24 @@ function TimeLesson({ lesson, kid, onComplete, onExit }) {
   const [selectedMinute, setSelectedMinute] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 170);
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 170;
+    return generatePracticeBatch(seed, (r, difficulty) => {
       const h = rndInt(r, 1, 12);
       let m;
-      if (isHour) m = pick(r, [0, 30]);
-      else if (isQuarter) m = pick(r, [0, 15, 30, 45]);
-      else m = pick(r, [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]);
-      probs.push({ h, m });
-    }
-    return probs;
+      if (isHour) {
+        // Easy: heures pleines, Medium/Hard: ajoute demi-heures
+        m = difficulty === 'easy' ? 0 : pick(r, [0, 30]);
+      } else if (isQuarter) {
+        m = difficulty === 'easy' ? pick(r, [0, 30]) : pick(r, [0, 15, 30, 45]);
+      } else {
+        // Minute mode: progresser des minutes "rondes" aux plus difficiles
+        if (difficulty === 'easy') m = pick(r, [0, 15, 30, 45]);
+        else if (difficulty === 'medium') m = pick(r, [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]);
+        else m = pick(r, [5, 10, 20, 25, 35, 40, 50, 55]);  // les heures non-rondes
+      }
+      return { h, m };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, isHour, isQuarter, isMinute]);
 
   const checkAnswer = () => {
@@ -4807,42 +4911,41 @@ function Base10AddLesson({ lesson, kid, onComplete, onExit }) {
 
   // Generate problems based on mode
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 200);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 200;
     const max = lesson.max || 100;
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
+    return generatePracticeBatch(seed, (r, difficulty) => {
       let a, b;
+      // Difficulty modulates the size of the numbers within the chosen mode
+      const sizeFactor = difficulty === 'easy' ? 0.5 : difficulty === 'medium' ? 0.8 : 1.0;
       if (mode === 'no-regroup') {
         if (max <= 100) {
-          // Tens and ones that don't carry
-          const aT = rndInt(r, 1, 7);
+          const aT = rndInt(r, 1, Math.max(2, Math.floor(7 * sizeFactor)));
           const aU = rndInt(r, 1, 4);
           const bT = rndInt(r, 1, 8 - aT);
           const bU = rndInt(r, 1, 4);
           a = aT * 10 + aU;
           b = bT * 10 + bU;
         } else if (max <= 1000) {
-          const aH = rndInt(r, 1, 7);
+          const aH = rndInt(r, 1, Math.max(2, Math.floor(7 * sizeFactor)));
           const bH = rndInt(r, 1, 8 - aH);
           a = aH * 100 + rndInt(r, 0, 49);
           b = bH * 100 + rndInt(r, 0, 49);
         } else {
-          const aK = rndInt(r, 1, 5);
+          const aK = rndInt(r, 1, Math.max(2, Math.floor(5 * sizeFactor)));
           const bK = rndInt(r, 1, 4);
           a = aK * 1000 + rndInt(r, 0, 499);
           b = bK * 1000 + rndInt(r, 0, 499);
         }
       } else if (mode === 'regroup-u') {
-        // Units add to >= 10
-        const aT = rndInt(r, 1, 7);
+        const aT = rndInt(r, 1, Math.max(2, Math.floor(7 * sizeFactor)));
         const aU = rndInt(r, 5, 9);
         const bT = rndInt(r, 1, 8 - aT);
         const bU = rndInt(r, 11 - aU, 9);
         a = aT * 10 + aU;
         b = bT * 10 + bU;
-      } else { // regroup-d : tens regroup
+      } else {
         if (max <= 1000) {
-          const aH = rndInt(r, 1, 7);
+          const aH = rndInt(r, 1, Math.max(2, Math.floor(7 * sizeFactor)));
           const aT = rndInt(r, 5, 9);
           const aU = rndInt(r, 0, 9);
           const bH = rndInt(r, 1, 8 - aH);
@@ -4851,7 +4954,7 @@ function Base10AddLesson({ lesson, kid, onComplete, onExit }) {
           a = aH * 100 + aT * 10 + aU;
           b = bH * 100 + bT * 10 + bU;
         } else {
-          const aK = rndInt(r, 1, 4);
+          const aK = rndInt(r, 1, Math.max(2, Math.floor(4 * sizeFactor)));
           const aH = rndInt(r, 5, 9);
           const bK = rndInt(r, 1, 4);
           const bH = rndInt(r, 11 - aH, 9);
@@ -4859,9 +4962,9 @@ function Base10AddLesson({ lesson, kid, onComplete, onExit }) {
           b = bK * 1000 + bH * 100 + rndInt(r, 0, 49);
         }
       }
-      probs.push({ a, b, answer: a + b });
-    }
-    return probs;
+      return { a, b, answer: a + b };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, mode]);
 
   const checkAnswer = () => {
@@ -4985,56 +5088,62 @@ function Base10SubLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 220);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 220;
     const max = lesson.max || 100;
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
-      let a, b;
-      if (mode === 'no-regroup') {
-        if (max <= 100) {
-          const aT = rndInt(r, 3, 9);
-          const aU = rndInt(r, 5, 9);
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      let a, b, attempts = 0;
+      const sizeFactor = difficulty === 'easy' ? 0.5 : difficulty === 'medium' ? 0.8 : 1.0;
+      while (attempts++ < 20) {
+        if (mode === 'no-regroup') {
+          if (max <= 100) {
+            const aT = rndInt(r, 3, Math.max(4, Math.floor(9 * sizeFactor)));
+            const aU = rndInt(r, 5, 9);
+            const bT = rndInt(r, 1, aT - 1);
+            const bU = rndInt(r, 0, aU);
+            a = aT * 10 + aU;
+            b = bT * 10 + bU;
+            return { a, b, answer: a - b };
+          } else if (max <= 1000) {
+            a = rndInt(r, 200, Math.max(300, Math.floor(999 * sizeFactor)));
+            b = rndInt(r, 100, a - 50);
+            if ((a % 10) >= (b % 10) && (Math.floor(a/10) % 10) >= (Math.floor(b/10) % 10)) {
+              return { a, b, answer: a - b };
+            }
+          } else {
+            a = rndInt(r, 2000, Math.max(3000, Math.floor(9999 * sizeFactor)));
+            b = rndInt(r, 1000, a - 500);
+            if ((a % 10) >= (b % 10) && (Math.floor(a/10) % 10) >= (Math.floor(b/10) % 10)) {
+              return { a, b, answer: a - b };
+            }
+          }
+        } else if (mode === 'regroup-u') {
+          const aT = rndInt(r, 3, Math.max(4, Math.floor(9 * sizeFactor)));
+          const aU = rndInt(r, 0, 4);
           const bT = rndInt(r, 1, aT - 1);
-          const bU = rndInt(r, 0, aU);
+          const bU = rndInt(r, aU + 1, 9);
           a = aT * 10 + aU;
           b = bT * 10 + bU;
-        } else if (max <= 1000) {
-          a = rndInt(r, 200, 999);
-          b = rndInt(r, 100, a - 50);
-          // Ensure no regroup needed: check
-          if ((a % 10) < (b % 10) || (Math.floor(a/10) % 10) < (Math.floor(b/10) % 10)) {
-            i--; continue;
-          }
+          return { a, b, answer: a - b };
         } else {
-          a = rndInt(r, 2000, 9999);
-          b = rndInt(r, 1000, a - 500);
-          if ((a % 10) < (b % 10) || (Math.floor(a/10) % 10) < (Math.floor(b/10) % 10)) {
-            i--; continue;
+          if (max <= 1000) {
+            a = rndInt(r, 200, Math.max(300, Math.floor(999 * sizeFactor)));
+            b = rndInt(r, 100, a - 10);
+            if ((Math.floor(a/10) % 10) < (Math.floor(b/10) % 10)) {
+              return { a, b, answer: a - b };
+            }
+          } else {
+            a = rndInt(r, 2000, Math.max(3000, Math.floor(9999 * sizeFactor)));
+            b = rndInt(r, 1000, a - 100);
+            return { a, b, answer: a - b };
           }
-        }
-      } else if (mode === 'regroup-u') {
-        const aT = rndInt(r, 3, 9);
-        const aU = rndInt(r, 0, 4);
-        const bT = rndInt(r, 1, aT - 1);
-        const bU = rndInt(r, aU + 1, 9);
-        a = aT * 10 + aU;
-        b = bT * 10 + bU;
-      } else { // regroup-d
-        if (max <= 1000) {
-          a = rndInt(r, 200, 999);
-          b = rndInt(r, 100, a - 10);
-          // Need tens borrow
-          if ((Math.floor(a/10) % 10) >= (Math.floor(b/10) % 10)) {
-            i--; continue;
-          }
-        } else {
-          a = rndInt(r, 2000, 9999);
-          b = rndInt(r, 1000, a - 100);
         }
       }
-      probs.push({ a, b, answer: a - b });
-    }
-    return probs;
+      // Fallback if no valid problem found in 20 attempts
+      a = max <= 100 ? 50 : (max <= 1000 ? 500 : 5000);
+      b = Math.floor(a / 2);
+      return { a, b, answer: a - b };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, mode]);
 
   const checkAnswer = () => {
@@ -5154,18 +5263,27 @@ function CompensationLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 240);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 240;
     const max = lesson.max || 100;
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
-      const a = rndInt(r, 20, max - 20);
-      // b is close to a round 10
-      const b = pick(r, [9, 11, 19, 21, 29, 31]);
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      let aMin, aMax, bChoices;
+      if (difficulty === 'easy') {
+        aMin = 20; aMax = Math.min(50, max - 20);
+        bChoices = [9, 11];
+      } else if (difficulty === 'medium') {
+        aMin = 20; aMax = max - 20;
+        bChoices = [9, 11, 19, 21];
+      } else {
+        aMin = Math.max(30, Math.floor(max / 3)); aMax = max - 20;
+        bChoices = [9, 11, 19, 21, 29, 31];
+      }
+      const a = rndInt(r, aMin, aMax);
+      const b = pick(r, bChoices);
       const answer = isSub ? a - b : a + b;
       const roundedB = Math.round(b / 10) * 10;
-      probs.push({ a, b, answer, roundedB });
-    }
-    return probs;
+      return { a, b, answer, roundedB };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, isSub]);
 
   const checkAnswer = () => {
@@ -5313,22 +5431,22 @@ function BarModelLesson({ lesson, kid, onComplete, onExit }) {
   ];
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 260);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 260;
     const max = lesson.max || 100;
-    const probs = [];
-    for (let i = 0; i < 5; i++) {
+    return generatePracticeBatch(seed, (r, difficulty) => {
       const tpl = pick(r, templates);
       let a, b;
+      const sizeFactor = difficulty === 'easy' ? 0.4 : difficulty === 'medium' ? 0.7 : 1.0;
       if (isSub) {
-        a = rndInt(r, 20, max);
+        a = rndInt(r, 20, Math.max(30, Math.floor(max * sizeFactor)));
         b = rndInt(r, 5, a - 5);
       } else {
-        a = rndInt(r, 10, max / 2);
+        a = rndInt(r, 10, Math.max(15, Math.floor((max / 2) * sizeFactor)));
         b = rndInt(r, 10, max - a);
       }
-      probs.push(tpl(a, b));
-    }
-    return probs;
+      return tpl(a, b);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, isSub]);
 
   const checkAnswer = () => {
@@ -5479,26 +5597,36 @@ function ArrayMultiplyLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 280);
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 280;
+    return generatePracticeBatch(seed, (r, difficulty) => {
       let a, b;
       if (is2x1) {
-        a = rndInt(r, 11, 50);
-        b = rndInt(r, 2, 9);
+        const aMax = difficulty === 'easy' ? 20 : difficulty === 'medium' ? 35 : 50;
+        a = rndInt(r, 11, aMax);
+        b = difficulty === 'easy' ? rndInt(r, 2, 5) : rndInt(r, 2, 9);
       } else if (is3x1) {
-        a = rndInt(r, 101, 999);
-        b = rndInt(r, 2, 9);
+        const aMax = difficulty === 'easy' ? 300 : difficulty === 'medium' ? 600 : 999;
+        a = rndInt(r, 101, aMax);
+        b = difficulty === 'easy' ? rndInt(r, 2, 5) : rndInt(r, 2, 9);
       } else if (tables) {
         a = pick(r, tables);
-        b = rndInt(r, 1, 10);
+        b = difficulty === 'easy' ? rndInt(r, 1, 5) : rndInt(r, 1, 10);
       } else {
-        a = rndInt(r, 2, lesson.max || 5);
-        b = rndInt(r, 2, 5);
+        const maxA = lesson.max || 5;
+        if (difficulty === 'easy') {
+          a = rndInt(r, 2, Math.min(3, maxA));
+          b = rndInt(r, 2, 3);
+        } else if (difficulty === 'medium') {
+          a = rndInt(r, 2, maxA);
+          b = rndInt(r, 2, 4);
+        } else {
+          a = rndInt(r, Math.max(2, Math.floor(maxA / 2)), maxA);
+          b = rndInt(r, 3, 5);
+        }
       }
-      probs.push({ a, b, answer: a * b });
-    }
-    return probs;
+      return { a, b, answer: a * b };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, isGroups, isArray, is2x1, is3x1, tables]);
 
   const checkAnswer = () => {
@@ -5649,38 +5777,43 @@ function FractionLesson({ lesson, kid, onComplete, onExit }) {
   const [selectedChoice, setSelectedChoice] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 300);
-    const probs = [];
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 300;
     if (isCompare) {
-      // Generate pairs of fractions to compare
-      for (let i = 0; i < 6; i++) {
-        const d1 = pick(r, [2, 3, 4, 6, 8]);
-        const d2 = pick(r, [2, 3, 4, 6, 8].filter(d => d !== d1));
+      return generatePracticeBatch(seed, (r, difficulty) => {
+        const denomPool = difficulty === 'easy' ? [2, 3, 4]
+          : difficulty === 'medium' ? [2, 3, 4, 6]
+          : [2, 3, 4, 6, 8];
+        const d1 = pick(r, denomPool);
+        const d2 = pick(r, denomPool.filter(d => d !== d1));
         const n1 = rndInt(r, 1, d1 - 1);
         const n2 = rndInt(r, 1, d2 - 1);
         const v1 = n1 / d1, v2 = n2 / d2;
-        probs.push({
+        return {
           a: { num: n1, den: d1 },
           b: { num: n2, den: d2 },
           answer: v1 > v2 ? 'a' : v1 < v2 ? 'b' : 'eq',
-        });
-      }
+        };
+      });
     } else if (isAdd) {
-      for (let i = 0; i < 6; i++) {
-        const d = pick(r, [4, 5, 6, 8, 10]);
+      return generatePracticeBatch(seed, (r, difficulty) => {
+        const denomPool = difficulty === 'easy' ? [4, 5]
+          : difficulty === 'medium' ? [4, 5, 6, 8]
+          : [6, 8, 10];
+        const d = pick(r, denomPool);
         const n1 = rndInt(r, 1, Math.floor(d / 2));
         const n2 = rndInt(r, 1, d - n1);
-        probs.push({ n1, n2, d, answer: n1 + n2 });
-      }
+        return { n1, n2, d, answer: n1 + n2 };
+      });
     } else {
-      // Build a target fraction
-      const d = denominator || pick(r, [2, 3, 4]);
-      for (let i = 0; i < 6; i++) {
+      return generatePracticeBatch(seed, (r, difficulty) => {
+        const d = denominator || (difficulty === 'easy' ? pick(r, [2, 3])
+          : difficulty === 'medium' ? pick(r, [2, 3, 4])
+          : pick(r, [3, 4, 6, 8]));
         const n = rndInt(r, 1, d - 1);
-        probs.push({ num: n, den: d });
-      }
+        return { num: n, den: d };
+      });
     }
-    return probs;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, denominator, isCompare, isAdd]);
 
   const checkAnswer = () => {
@@ -5886,21 +6019,34 @@ function FractionEqLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 320);
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
-      const baseN = pick(r, [1, 2, 3]);
-      const baseD = pick(r, [2, 3, 4, 5].filter(d => d > baseN));
-      const mult = rndInt(r, 2, 4);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 320;
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      let baseNPool, baseDPool, multMax;
+      if (difficulty === 'easy') {
+        baseNPool = [1];
+        baseDPool = [2, 3, 4];
+        multMax = 3;
+      } else if (difficulty === 'medium') {
+        baseNPool = [1, 2];
+        baseDPool = [2, 3, 4, 5];
+        multMax = 4;
+      } else {
+        baseNPool = [1, 2, 3];
+        baseDPool = [2, 3, 4, 5, 6];
+        multMax = 5;
+      }
+      const baseN = pick(r, baseNPool);
+      const baseD = pick(r, baseDPool.filter(d => d > baseN));
+      const mult = rndInt(r, 2, multMax);
       const hideNumerator = r() > 0.5;
-      probs.push({
+      return {
         baseN, baseD, mult,
         targetN: baseN * mult, targetD: baseD * mult,
         hideNumerator,
         answer: hideNumerator ? baseN * mult : baseD * mult,
-      });
-    }
-    return probs;
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id]);
 
   const checkAnswer = () => {
@@ -6037,9 +6183,7 @@ function ProblemSolvingLesson({ lesson, kid, onComplete, onExit }) {
   const [showBarModel, setShowBarModel] = useState(false);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 340);
     const max = lesson.max || 100;
-    const probs = [];
 
     const templates = {
       add: [
@@ -6076,29 +6220,30 @@ function ProblemSolvingLesson({ lesson, kid, onComplete, onExit }) {
       ],
     };
 
-    for (let i = 0; i < 5; i++) {
+    return generatePracticeBatch(Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 340, (r, difficulty) => {
       const set = templates[mode] || templates.add;
       const tpl = pick(r, set);
+      const sizeFactor = difficulty === 'easy' ? 0.4 : difficulty === 'medium' ? 0.7 : 1.0;
       if (mode === 'mul') {
-        const a = rndInt(r, 2, 9);
-        const b = rndInt(r, 2, 10);
-        probs.push(tpl(a, b));
+        const a = rndInt(r, 2, difficulty === 'easy' ? 5 : difficulty === 'medium' ? 7 : 9);
+        const b = rndInt(r, 2, difficulty === 'easy' ? 5 : difficulty === 'medium' ? 8 : 10);
+        return tpl(a, b);
       } else if (mode === 'two-step') {
-        const a = rndInt(r, 30, max);
+        const a = rndInt(r, 30, Math.max(40, Math.floor(max * sizeFactor)));
         const b = rndInt(r, 5, Math.floor(a / 3));
         const c = rndInt(r, 5, Math.floor(a / 3));
-        probs.push(tpl(a, b, c));
+        return tpl(a, b, c);
       } else if (mode === 'sub' || mode === 'compare') {
-        const a = rndInt(r, 20, max);
+        const a = rndInt(r, 20, Math.max(30, Math.floor(max * sizeFactor)));
         const b = rndInt(r, 5, a - 5);
-        probs.push(tpl(a, b));
+        return tpl(a, b);
       } else {
-        const a = rndInt(r, 10, max / 2);
+        const a = rndInt(r, 10, Math.max(15, Math.floor((max / 2) * sizeFactor)));
         const b = rndInt(r, 10, max - a);
-        probs.push(tpl(a, b));
+        return tpl(a, b);
       }
-    }
-    return probs;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.max, mode]);
 
   const checkAnswer = () => {
@@ -6231,21 +6376,26 @@ function DivisionLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 360);
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 360;
+    return generatePracticeBatch(seed, (r, difficulty) => {
       let divisor, quotient;
       if (mode === 'easy') {
         divisor = pick(r, [2, 5, 10]);
-        quotient = rndInt(r, 2, 10);
+        quotient = difficulty === 'easy' ? rndInt(r, 2, 5)
+          : difficulty === 'medium' ? rndInt(r, 2, 8)
+          : rndInt(r, 5, 10);
       } else {
-        divisor = rndInt(r, 2, 5);
-        quotient = rndInt(r, 2, 10);
+        divisor = difficulty === 'easy' ? rndInt(r, 2, 3)
+          : difficulty === 'medium' ? rndInt(r, 2, 4)
+          : rndInt(r, 3, 5);
+        quotient = difficulty === 'easy' ? rndInt(r, 2, 5)
+          : difficulty === 'medium' ? rndInt(r, 2, 8)
+          : rndInt(r, 5, 10);
       }
       const dividend = divisor * quotient;
-      probs.push({ dividend, divisor, quotient, mode });
-    }
-    return probs;
+      return { dividend, divisor, quotient, mode };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, mode]);
 
   const checkAnswer = () => {
@@ -6373,25 +6523,31 @@ function GeometryLesson({ lesson, kid, onComplete, onExit }) {
   const [feedback, setFeedback] = useState(null);
 
   const practiceProblems = useMemo(() => {
-    const r = rng(lesson.id.charCodeAt(0) + 380);
-    const probs = [];
-    for (let i = 0; i < 6; i++) {
-      const shape = pick(r, ['square', 'rect', 'triangle']);
+    const seed = Math.floor(Date.now() / 1000) + lesson.id.charCodeAt(0) + 380;
+    return generatePracticeBatch(seed, (r, difficulty) => {
+      const shapePool = difficulty === 'easy' ? ['square', 'rect']
+        : difficulty === 'medium' ? ['square', 'rect', 'triangle']
+        : ['rect', 'triangle'];
+      const shape = pick(r, shapePool);
+      let sizeMax;
+      if (difficulty === 'easy') sizeMax = 6;
+      else if (difficulty === 'medium') sizeMax = 12;
+      else sizeMax = 20;
       let sides;
       if (shape === 'square') {
-        const s = rndInt(r, 3, 12);
+        const s = rndInt(r, 3, sizeMax);
         sides = [s, s, s, s];
       } else if (shape === 'rect') {
-        const w = rndInt(r, 3, 12);
-        const h = rndInt(r, 3, 12);
+        const w = rndInt(r, 3, sizeMax);
+        const h = rndInt(r, 3, sizeMax);
         sides = [w, h, w, h];
       } else {
-        sides = [rndInt(r, 3, 9), rndInt(r, 3, 9), rndInt(r, 3, 9)];
+        sides = [rndInt(r, 3, sizeMax), rndInt(r, 3, sizeMax), rndInt(r, 3, sizeMax)];
       }
       const perimeter = sides.reduce((s, a) => s + a, 0);
-      probs.push({ shape, sides, perimeter });
-    }
-    return probs;
+      return { shape, sides, perimeter };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id]);
 
   const checkAnswer = () => {
