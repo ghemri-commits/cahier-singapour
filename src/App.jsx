@@ -78,17 +78,7 @@ function getKidFromUrl() {
   try { return new URLSearchParams(window.location.search).get('kid'); }
   catch (e) { return null; }
 }
-const KEY_SG_STARS = 'singapour:stars';
-async function loadStars() { 
-  try { const r = await window.storage.get(KEY_SG_STARS, SHARED); return r?.value ? JSON.parse(r.value) : {}; } 
-  catch (e) { return {}; } 
-}
-async function saveStars(kidId, count) { 
-  const current = await loadStars();
-  current[kidId] = (current[kidId] || 0) + count;
-  await window.storage.set(KEY_SG_STARS, JSON.stringify(current), SHARED);
-  return current;
-}
+
 const KEY_SG_STARS = 'singapour:stars';
 async function loadStars() { 
   try { const r = await window.storage.get(KEY_SG_STARS, SHARED); return r?.value ? JSON.parse(r.value) : {}; } 
@@ -137,14 +127,20 @@ const CURRICULUM = [
     { id: 'g1u1', name: 'Nombres à 20', icon: '①', lessons: [
       { id: 'g1u1l1', name: 'Décomposer 10', type: 'numberBonds', focusOn: 10, description: 'Toutes les façons de faire 10' },
       { id: 'g1u1l2', name: 'Doubles', type: 'doubles', max: 10, description: '2+2, 3+3, 4+4...' },
-      { id: 'g1u1l3', name: 'Course : Additions', type: 'speedDrill', mode: 'addition', targetNumber: 10, description: 'Résous un maximum de calculs.' }
+      { id: 'g1u1l3', name: 'Course : Additions', type: 'speedDrill', mode: 'addition', targetNumber: 10, description: 'Résous un maximum de calculs.' },
+      { id: 'g1u1l3', name: 'Course : Additions', type: 'speedDrill', mode: 'addition', targetNumber: 10, description: 'Résous un maximum de calculs.' },
+      { id: 'g1u1l4', name: 'Course aux étoiles', type: 'speedDrill', mode: 'addition', targetNumber: 10, description: 'Jeu de vitesse.' }
+    ]
     ]}
   ]},
   { grade: 2, units: [
     { id: 'g2u1', name: 'Nombres à 1000', icon: '②', lessons: [
       { id: 'g2u1l1', name: 'Base 10', type: 'base10', max: 1000, description: 'Centaines, dizaines, unités' },
       { id: 'g2u1l2', name: 'Modèle en barres', type: 'barModel', op: '+', description: 'Visualiser avec des barres' },
-      { id: 'g2u1l3', name: 'Course : Tables 2, 5, 10', type: 'speedDrill', mode: 'multiplication', targetNumber: 2, description: 'Pratique de vitesse.' }
+      { id: 'g2u1l3', name: 'Course : Tables 2, 5, 10', type: 'speedDrill', mode: 'multiplication', targetNumber: 2, description: 'Pratique de vitesse.' },
+      { id: 'g2u1l3', name: 'Course : Tables 2, 5, 10', type: 'speedDrill', mode: 'multiplication', targetNumber: 2, description: 'Pratique de vitesse.' },
+      { id: 'g2u1l4', name: 'Course aux étoiles', type: 'speedDrill', mode: 'multiplication', targetNumber: 5, description: 'Jeu de vitesse.' }
+    ]
     ]}
   ]},
   { grade: 3, units: [
@@ -162,10 +158,6 @@ const CURRICULUM = [
   ]}
 ];
 
-// Exemple d'ajout dans l'unité 2 de la 1re année
-{ id: 'g1-u2-l5', name: 'Course : Additions', type: 'speedDrill', mode: 'addition', targetNumber: 10, description: 'Jeu de vitesse.' }
-
-// Exemple d'ajout dans l'unité 4 de la 2e année
 { id: 'g2-u4-l6', name: 'Course : Multiplications', type: 'speedDrill', mode: 'multiplication', targetNumber: 5, description: 'Pratique des tables.' }
 // ============================================================
 // HELPERS
