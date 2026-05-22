@@ -89,6 +89,17 @@ async function saveStars(kidId, count) {
   await window.storage.set(KEY_SG_STARS, JSON.stringify(current), SHARED);
   return current;
 }
+const KEY_SG_STARS = 'singapour:stars';
+async function loadStars() { 
+  try { const r = await window.storage.get(KEY_SG_STARS, SHARED); return r?.value ? JSON.parse(r.value) : {}; } 
+  catch (e) { return {}; } 
+}
+async function saveStars(kidId, count) { 
+  const current = await loadStars();
+  current[kidId] = (current[kidId] || 0) + count;
+  await window.storage.set(KEY_SG_STARS, JSON.stringify(current), SHARED);
+  return current;
+}
 // ============================================================
 // PALETTE & STYLE TOKENS
 // ============================================================
@@ -151,7 +162,11 @@ const CURRICULUM = [
   ]}
 ];
 
+// Exemple d'ajout dans l'unité 2 de la 1re année
+{ id: 'g1-u2-l5', name: 'Course : Additions', type: 'speedDrill', mode: 'addition', targetNumber: 10, description: 'Jeu de vitesse.' }
 
+// Exemple d'ajout dans l'unité 4 de la 2e année
+{ id: 'g2-u4-l6', name: 'Course : Multiplications', type: 'speedDrill', mode: 'multiplication', targetNumber: 5, description: 'Pratique des tables.' }
 // ============================================================
 // HELPERS
 // ============================================================
@@ -6603,10 +6618,9 @@ function LessonView({ lesson, kid, onComplete, onExit }) {
   if (lesson.type === 'speedDrill') {
     return (
       <Paper>
-        <LessonHeader lessonName={lesson.name} accent={KID_COLORS[kid.color]?.ink} onExit={onExit} phaseIdx={0} phases={['pratique']} timer={0} />
+        <LessonHeader lessonName={lesson.name} accent={KID_COLORS[kid.color]?.ink} onExit={onExit} phaseIdx={0} phases={['pratique']} />
         <div className="max-w-2xl mx-auto px-6 pb-16 pt-8">
-          <SpeedDrillGame mode={lesson.mode} targetNumber={lesson.targetNumber} accent={KID_COLORS[kid.color]?.ink || '#1c1917'}
-            onComplete={({ score }) => onComplete({ lessonId: lesson.id, durationSec: 60, practiceCorrect: score, practiceTotal: score, isPerfect: score > 15, score })} />
+          <SpeedDrillGame mode={lesson.mode} targetNumber={lesson.targetNumber} accent={KID_COLORS[kid.color]?.ink || '#1c1917'} onComplete={(r) => onComplete({ ...r, lessonId: lesson.id, durationSec: 60 })} />
         </div>
       </Paper>
     );
@@ -6633,30 +6647,28 @@ function LessonView({ lesson, kid, onComplete, onExit }) {
     case 'moneyQc': return <MoneyLesson lesson={lesson} kid={kid} onComplete={onComplete} onExit={onExit} />;
     case 'measureLength': return <MeasureLengthLesson lesson={lesson} kid={kid} onComplete={onComplete} onExit={onExit} />;
     case 'time': return <TimeLesson lesson={lesson} kid={kid} onComplete={onComplete} onExit={onExit} />;
-    default: return <Paper><div className="text-center pt-16"><button onClick={onExit}>Retour</button><div className="mt-4">Leçon introuvable</div></div></Paper>;
+    default: return <Paper><div className="text-center pt-16"><button onClick={onExit}>Retour</button><div className="mt-4">Type de leçon inconnu</div></div></Paper>;
   }
 }
 
-function KidPicker({ config, progress, stars, onPickKid, onPickParent, lockedKidId }) {
-  const visibleKids = config.kids.filter(k => k.enabled !== false && k.name?.trim() && (!lockedKidId || k.id === lockedKidId));
-
+function KidPicker({ config, progress, stars, onPickKid, onPickParent }) {
   return (
     <Paper>
       <div className="max-w-4xl mx-auto px-6 pt-12 pb-8">
         <h1 className="font-display text-5xl text-stone-900 mb-2">Cahier de Mathématiques</h1>
-        <p className="text-stone-500 uppercase tracking-widest text-sm">Méthode Singapour</p>
+        <p className="text-stone-500 uppercase tracking-widest text-sm">Méthode Singapour · Québec</p>
       </div>
       <div className="max-w-4xl mx-auto px-6 pb-16">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {visibleKids.map(kid => {
+          {config.kids.filter(k => k.enabled !== false && k.name?.trim()).map(kid => {
             const c = KID_COLORS[kid.color] || KID_COLORS.sakura;
             return (
               <button key={kid.id} onClick={() => onPickKid(kid)}
                 className="text-left rounded-[2rem] p-8 border-2 transition-all hover:shadow-2xl hover:-translate-y-2 active:scale-95 bg-white"
-                style={{ borderColor: c.ink + '40' }}>
+                style={{ borderColor: c.ink + '30' }}>
                 <div className="flex items-center gap-5">
                   <div className="w-20 h-20 rounded-3xl flex items-center justify-center font-display text-4xl text-white shadow-inner"
-                    style={{ background: c.ink }}>{kid.name.charAt(0).toUpperCase()}</div>
+                    style={{ background: c.ink }}>{kid.name[0]}</div>
                   <div>
                     <div className="font-display text-3xl text-stone-900">{kid.name}</div>
                     <div className="text-stone-500">{kid.grade === 1 ? '1re' : `${kid.grade}e`} année</div>
@@ -6668,7 +6680,7 @@ function KidPicker({ config, progress, stars, onPickKid, onPickParent, lockedKid
           })}
         </div>
         <div className="mt-16 text-center">
-          <button onClick={onPickParent} className="text-xs uppercase tracking-[0.25em] text-stone-500 hover:text-stone-900 py-2 px-4 rounded-lg hover:bg-stone-100 transition-colors">
+          <button onClick={onPickParent} className="text-xs uppercase tracking-[0.25em] text-stone-400 hover:text-stone-900 py-3 px-6 rounded-lg hover:bg-stone-100 transition-colors">
             🔒 Accès parent
           </button>
         </div>
@@ -6677,65 +6689,48 @@ function KidPicker({ config, progress, stars, onPickKid, onPickParent, lockedKid
   );
 }
 
-function ParentGate({ pin, onSuccess, onBack }) {
-  const [entered, setEntered] = useState('');
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    if (entered.length === 4) {
-      if (entered === pin) onSuccess();
-      else { setError(true); setTimeout(() => { setEntered(''); setError(false); }, 600); }
-    }
-  }, [entered, pin, onSuccess]);
-  return (
-    <Paper>
-      <div className="max-w-md mx-auto px-6 pt-16 pb-16 min-h-screen flex flex-col">
-        <button onClick={onBack} className="text-sm text-stone-500 hover:text-stone-900 self-start">← Retour</button>
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="text-4xl mb-3">🔒</div>
-          <div className="font-display text-3xl text-stone-900">Accès parent</div>
-          <div className="text-sm text-stone-500 mt-2">NIP à 4 chiffres</div>
-          <div className={`mt-6 ${error ? 'animate-shake' : ''}`}>
-            <PinPad value={entered} onChange={setEntered} />
-          </div>
-        </div>
-      </div>
-    </Paper>
-  );
-}
-
 function CurriculumPath({ kid, progress, onPickLesson, onBack }) {
-  const c = KID_COLORS[kid.color] || KID_COLORS.sakura;
+  const c = KID_COLORS[kid.color];
   const grade = CURRICULUM.find(g => g.grade === kid.grade);
   const kp = progress[kid.id] || {};
   const [openUnit, setOpenUnit] = useState(grade?.units[0]?.id);
 
-  if (!grade) return <Paper><div className="text-center pt-16"><button onClick={onBack}>Retour</button><div>Aucun programme.</div></div></Paper>;
+  if (!grade) return <Paper><div className="text-center pt-16"><button onClick={onBack}>Retour</button></div></Paper>;
 
   return (
     <Paper>
-      <div className="max-w-4xl mx-auto px-6 pt-10 pb-6">
-        <button onClick={onBack} className="text-sm text-stone-600 hover:text-stone-900 mb-6">← Accueil</button>
-        <div className="flex items-center gap-5 mb-8">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center font-display text-4xl text-white" style={{ background: c.ink }}>{kid.name[0]}</div>
-          <div><h1 className="font-display text-3xl text-stone-900">{kid.name}</h1><div className="text-stone-500">Programme {grade.grade}e année</div></div>
+      <div className="max-w-3xl mx-auto px-6 pt-10 pb-6">
+        <button onClick={onBack} className="text-sm font-bold text-stone-500 mb-6">← Accueil</button>
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-display text-2xl shadow-md" style={{ background: c.ink }}>{kid.name[0]}</div>
+          <div>
+            <h1 className="font-display text-3xl text-stone-900">{kid.name}</h1>
+            <p className="text-stone-500 text-sm">Parcours de mathématiques</p>
+          </div>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-4">
           {grade.units.map((unit, idx) => {
             const isOpen = openUnit === unit.id;
             return (
-              <div key={unit.id} className="bg-white rounded-3xl border-2 overflow-hidden" style={{ borderColor: isOpen ? c.ink : '#e7e5e4' }}>
+              <div key={unit.id} className="bg-white rounded-3xl border-2 transition-all" style={{ borderColor: isOpen ? c.ink : '#e7e5e4' }}>
                 <button onClick={() => setOpenUnit(isOpen ? null : unit.id)} className="w-full p-5 flex items-center gap-4 text-left">
                   <div className="font-display text-3xl w-12 text-center" style={{ color: c.ink }}>{unit.icon}</div>
-                  <div className="flex-1"><div className="text-xs uppercase text-stone-500">Unité {idx + 1}</div><div className="font-display text-lg">{unit.name}</div></div>
+                  <div className="flex-1">
+                    <div className="text-xs font-bold uppercase text-stone-400">Unité {idx + 1}</div>
+                    <div className="font-display text-lg text-stone-900">{unit.name}</div>
+                  </div>
                 </button>
                 {isOpen && (
-                  <div className="px-5 pb-5 border-t border-stone-200 pt-3 space-y-2">
+                  <div className="px-5 pb-5 border-t border-stone-100 pt-3 space-y-2">
                     {unit.lessons.map(lesson => {
                       const done = kp[lesson.id]?.completed;
                       return (
-                        <button key={lesson.id} onClick={() => onPickLesson(lesson)} className="w-full text-left rounded-2xl p-4 flex items-center gap-3 bg-stone-50 hover:bg-stone-100">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: done ? '#10b981' : c.ink, color: 'white' }}>{done ? '✓' : '→'}</div>
-                          <div className="flex-1"><div className="font-medium text-stone-900">{lesson.name}</div><div className="text-xs text-stone-500">{lesson.description}</div></div>
+                        <button key={lesson.id} onClick={() => onPickLesson(lesson)} className="w-full text-left rounded-2xl p-4 flex items-center gap-4 bg-stone-50 border border-stone-200 hover:border-stone-400">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: done ? '#10b981' : c.ink, color: 'white' }}>{done ? '✓' : '→'}</div>
+                          <div className="flex-1">
+                            <div className="font-bold text-stone-800 text-sm">{lesson.name}</div>
+                            <div className="text-xs text-stone-400 mt-0.5">{lesson.description}</div>
+                          </div>
                         </button>
                       );
                     })}
@@ -6745,6 +6740,125 @@ function CurriculumPath({ kid, progress, onPickLesson, onBack }) {
             );
           })}
         </div>
+      </div>
+    </Paper>
+  );
+}
+
+function ParentGate({ pin, onSuccess, onBack }) {
+  const [entered, setEntered] = useState('');
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (entered.length === 4) {
+      if (entered === pin) onSuccess();
+      else { setError(true); setTimeout(() => { setEntered(''); setError(false); }, 600); }
+    }
+  }, [entered, pin, onSuccess]);
+
+  return (
+    <Paper>
+      <div className="max-w-md mx-auto px-6 pt-16 pb-16 min-h-screen flex flex-col">
+        <button onClick={onBack} className="text-sm font-bold text-stone-500 hover:text-stone-900 self-start">← Retour</button>
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="text-5xl mb-4">🔒</div>
+          <div className="font-display text-3xl text-stone-900 mb-2">Espace Parent Secure</div>
+          <div className="text-sm text-stone-400 mb-6 text-center">Rentre le code parental à 4 chiffres pour continuer.</div>
+          <div className={error ? 'animate-shake' : ''}>
+            <PinPad value={entered} onChange={setEntered} />
+          </div>
+          {error && <div className="text-xs font-bold text-rose-600 mt-4">Code d'accès non valide</div>}
+        </div>
+      </div>
+    </Paper>
+  );
+}
+
+function OverviewTab({ config, sessions, progress }) {
+  return (
+    <div className="mt-6 space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {config.kids.filter(k => k.name?.trim()).map(kid => {
+          const c = KID_COLORS[kid.color] || KID_COLORS.sakura;
+          const kSess = sessions.filter(s => s.kidId === kid.id);
+          const totalTime = kSess.reduce((acc, s) => acc + (s.durationSec || 0), 0);
+          return (
+            <div key={kid.id} className="p-6 rounded-2xl border bg-white shadow-sm" style={{ borderLeft: `6px solid ${c.ink}` }}>
+              <h3 className="font-display text-xl text-stone-900">{kid.name}</h3>
+              <p className="text-xs text-stone-400 font-bold uppercase">{kid.grade}re année</p>
+              <div className="grid grid-cols-2 gap-4 mt-4 text-center">
+                <div className="bg-stone-50 p-3 rounded-xl">
+                  <div className="text-xs text-stone-400 font-bold">Temps passé</div>
+                  <div className="font-mono font-bold text-lg mt-1">{fmtDur(totalTime)}</div>
+                </div>
+                <div className="bg-stone-50 p-3 rounded-xl">
+                  <div className="text-xs text-stone-400 font-bold">Sessions terminées</div>
+                  <div className="font-mono font-bold text-lg mt-1">{kSess.length}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ProgressionTab({ config, progress, onResetProgress }) {
+  return (
+    <div className="mt-6 space-y-4">
+      <div className="bg-white p-6 rounded-2xl border border-stone-200">
+        <h3 className="font-display text-lg mb-4">Suivi global</h3>
+        <p className="text-sm text-stone-500 mb-6">Suivi complet des exercices réussis par rapport à la base du programme québécois.</p>
+        <button onClick={() => { if(confirm("Effacer tout l'historique ?")) onResetProgress('all'); }} className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-2 rounded-xl active:scale-95">
+          Reset complet de la progression
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SettingsTab({ config, onUpdate }) {
+  const [draft, setDraft] = useState(config);
+  return (
+    <div className="mt-6 space-y-4 bg-white p-6 rounded-2xl border border-stone-200">
+      <h3 className="font-display text-lg mb-4">Gestion des accès enfants</h3>
+      {draft.kids.map((kid, idx) => (
+        <div key={kid.id} className="flex items-center justify-between border-b border-stone-100 py-3 text-sm">
+          <div>
+            <span className="font-bold text-stone-800">{kid.name}</span>
+            <span className="text-xs text-stone-400 ml-2">({kid.grade}e année)</span>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={kid.enabled !== false} onChange={(e) => {
+              const updatedKids = [...draft.kids];
+              updatedKids[idx].enabled = e.target.checked;
+              const newConfig = { ...draft, kids: updatedKids };
+              setDraft(newConfig); onUpdate(newConfig);
+            }} />
+            <span className="text-xs font-bold text-stone-500">Activer le profil</span>
+          </label>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ParentDashboard({ config, sessions, progress, onUpdateConfig, onResetProgress, onBack }) {
+  const [tab, setTab] = useState('overview');
+  return (
+    <Paper>
+      <div className="max-w-4xl mx-auto px-6 pt-10 pb-16">
+        <button onClick={onBack} className="text-sm font-bold text-stone-500 hover:text-stone-900 mb-4">← Revenir</button>
+        <h1 className="font-display text-3xl text-stone-900">Tableau de bord de contrôle</h1>
+        <div className="flex gap-2 border-b border-stone-200 mt-6">
+          <button onClick={() => setTab('overview')} className={`pb-2 px-4 text-sm font-bold ${tab === 'overview' ? 'border-b-2 border-stone-900 text-stone-900' : 'text-stone-400'}`}>Vue générale</button>
+          <button onClick={() => setTab('progression')} className={`pb-2 px-4 text-sm font-bold ${tab === 'progression' ? 'border-b-2 border-stone-900 text-stone-900' : 'text-stone-400'}`}>Progression</button>
+          <button onClick={() => setTab('settings')} className={`pb-2 px-4 text-sm font-bold ${tab === 'settings' ? 'border-b-2 border-stone-900 text-stone-900' : 'text-stone-400'}`}>Élèves & Profils</button>
+        </div>
+        {tab === 'overview' && <OverviewTab config={config} sessions={sessions} progress={progress} />}
+        {tab === 'progression' && <ProgressionTab config={config} progress={progress} onResetProgress={onResetProgress} />}
+        {tab === 'settings' && <SettingsTab config={config} onUpdate={onUpdateConfig} />}
       </div>
     </Paper>
   );
@@ -6762,38 +6876,42 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const c = await loadConfig(); const s = await loadAllSessions();
-      const p = await loadProgress(); const st = await loadStars();
-      setConfig(c); setSessions(s); setProgress(p); setStars(st);
+      const [c, p, s, st] = await Promise.all([loadConfig(), loadAllSessions(), loadProgress(), loadStars()]);
+      setConfig(c); setSessions(p); setProgress(s); setStars(st);
       setLoading(false);
     })();
   }, []);
 
   const handleLessonComplete = async (result) => {
     if (result.score) {
-        const newStars = await saveStars(activeKid.id, result.score);
-        setStars(newStars);
+      const updatedStars = await saveStars(activeKid.id, result.score);
+      setStars(updatedStars);
     }
-    const session = { id: 'sess_' + Date.now(), kidId: activeKid.id, lessonId: result.lessonId, durationSec: result.durationSec, timestamp: Date.now() };
+    const session = {
+      id: 'sess_' + Date.now(), kidId: activeKid.id, lessonId: activeLesson.id,
+      durationSec: result.durationSec || 60, practiceCorrect: result.practiceCorrect || 0,
+      practiceTotal: result.practiceTotal || 0, timestamp: Date.now()
+    };
     await saveSession(session);
-    
+
     const newProgress = { ...progress };
     if (!newProgress[activeKid.id]) newProgress[activeKid.id] = {};
-    newProgress[activeKid.id][result.lessonId] = { completed: true, timestamp: Date.now() };
+    newProgress[activeKid.id][activeLesson.id] = { completed: true, timestamp: Date.now() };
     await saveProgress(newProgress);
     setProgress(newProgress);
     setSessions(await loadAllSessions());
     setScreen('curriculum');
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center">Chargement...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center font-display text-2xl">Chargement...</div>;
 
   return (
-    <>
+    <div className="min-h-screen">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap');
-        :root { --paper: #faf7f2; --ink: #1c1917; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700&family=Fraunces:wght@600;700&display=swap');
+        :root { --paper: #faf7f2; }
         body { background: var(--paper); font-family: 'Plus Jakarta Sans', sans-serif; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+        body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(90deg, rgba(0,0,0,0.02) 1px, transparent 1px), linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px); background-size: 25px 25px; pointer-events: none; }
         .font-display { font-family: 'Fraunces', serif; }
         @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
         .animate-shake { animation: shake 0.4s ease-in-out; }
@@ -6803,7 +6921,7 @@ export default function App() {
       {screen === 'curriculum' && activeKid && <CurriculumPath kid={activeKid} progress={progress} onPickLesson={(l) => { setActiveLesson(l); setScreen('lesson'); }} onBack={() => setScreen('home')} />}
       {screen === 'lesson' && activeKid && activeLesson && <LessonView lesson={activeLesson} kid={activeKid} onComplete={handleLessonComplete} onExit={() => setScreen('curriculum')} />}
       {screen === 'parentgate' && <ParentGate pin={config.parentPin || '1234'} onSuccess={() => setScreen('parentdash')} onBack={() => setScreen('home')} />}
-      {screen === 'parentdash' && <ParentDashboard config={config} sessions={sessions} progress={progress} onUpdateConfig={async (c) => { await saveConfig(c); setConfig(c); }} onResetProgress={async (kidId) => { const np = {...progress}; delete np[kidId]; await saveProgress(np); setProgress(np); }} onBack={() => setScreen('home')} />}
-    </>
+      {screen === 'parentdash' && <ParentDashboard config={config} sessions={sessions} progress={progress} onUpdateConfig={async (c) => { await saveConfig(c); setConfig(c); }} onResetProgress={async () => { await saveProgress({}); setProgress({}); }} onBack={() => setScreen('home')} />}
+    </div>
   );
 }
