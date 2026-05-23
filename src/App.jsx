@@ -130,7 +130,6 @@ const CURRICULUM = [
       { id: 'g1u1l3', name: 'Course : Additions', type: 'speedDrill', mode: 'addition', targetNumber: 10, description: 'Résous un maximum de calculs.' },
       { id: 'g1u1l3', name: 'Course : Additions', type: 'speedDrill', mode: 'addition', targetNumber: 10, description: 'Résous un maximum de calculs.' },
       { id: 'g1u1l4', name: 'Course aux étoiles', type: 'speedDrill', mode: 'addition', targetNumber: 10, description: 'Jeu de vitesse.' }
-    ]
     ]}
   ]},
   { grade: 2, units: [
@@ -140,7 +139,6 @@ const CURRICULUM = [
       { id: 'g2u1l3', name: 'Course : Tables 2, 5, 10', type: 'speedDrill', mode: 'multiplication', targetNumber: 2, description: 'Pratique de vitesse.' },
       { id: 'g2u1l3', name: 'Course : Tables 2, 5, 10', type: 'speedDrill', mode: 'multiplication', targetNumber: 2, description: 'Pratique de vitesse.' },
       { id: 'g2u1l4', name: 'Course aux étoiles', type: 'speedDrill', mode: 'multiplication', targetNumber: 5, description: 'Jeu de vitesse.' }
-    ]
     ]}
   ]},
   { grade: 3, units: [
@@ -158,7 +156,6 @@ const CURRICULUM = [
   ]}
 ];
 
-{ id: 'g2-u4-l6', name: 'Course : Multiplications', type: 'speedDrill', mode: 'multiplication', targetNumber: 5, description: 'Pratique des tables.' }
 // ============================================================
 // HELPERS
 // ============================================================
