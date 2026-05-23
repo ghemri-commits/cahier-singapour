@@ -45,7 +45,7 @@ async function loadConfig() {
       const parsed = JSON.parse(r.value);
       const kids = (parsed.kids || DEFAULT_CONFIG.kids).map((k, i) => ({
         ...DEFAULT_CONFIG.kids[i], ...k,
-        grade: k.grade || (i === 1 ? 2 : 1),
+        grade: k.grade || DEFAULT_CONFIG.kids[i]?.grade || 1,
       }));
       return { ...DEFAULT_CONFIG, ...parsed, kids };
     }
@@ -6713,9 +6713,15 @@ function CurriculumPath({ kid, progress, onPickLesson, onBack }) {
                   <div className="px-5 pb-5 border-t border-stone-100 pt-3 space-y-2">
                     {unit.lessons.map(lesson => {
                       const done = kp[lesson.id]?.completed;
+                      const isLocked = (kid.lockedLessons || []).includes(lesson.id);
                       return (
-                        <button key={lesson.id} onClick={() => onPickLesson(lesson)} className="w-full text-left rounded-2xl p-4 flex items-center gap-4 bg-stone-50 border border-stone-200 hover:border-stone-400">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: done ? '#10b981' : c.ink, color: 'white' }}>{done ? '✓' : '→'}</div>
+                        <button key={lesson.id} onClick={() => !isLocked && onPickLesson(lesson)}
+                          disabled={isLocked}
+                          className={`w-full text-left rounded-2xl p-4 flex items-center gap-4 border ${isLocked ? 'bg-stone-100 border-stone-200 opacity-60 cursor-not-allowed' : 'bg-stone-50 border-stone-200 hover:border-stone-400'}`}>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                            style={{ background: isLocked ? '#9ca3af' : done ? '#10b981' : c.ink, color: 'white' }}>
+                            {isLocked ? '🔒' : done ? '✓' : '→'}
+                          </div>
                           <div className="flex-1">
                             <div className="font-bold text-stone-800 text-sm">{lesson.name}</div>
                             <div className="text-xs text-stone-400 mt-0.5">{lesson.description}</div>
@@ -6809,26 +6815,101 @@ function ProgressionTab({ config, progress, onResetProgress }) {
 
 function SettingsTab({ config, onUpdate }) {
   const [draft, setDraft] = useState(config);
+  useEffect(() => { setDraft(config); }, [config]);
+
+  const updateKid = (idx, changes) => {
+    const kids = draft.kids.map((k, i) => i === idx ? { ...k, ...changes } : k);
+    const newConfig = { ...draft, kids };
+    setDraft(newConfig);
+    onUpdate(newConfig);
+  };
+
+  const toggleLessonLock = (kidIdx, lessonId) => {
+    const kid = draft.kids[kidIdx];
+    const locked = kid.lockedLessons || [];
+    const newLocked = locked.includes(lessonId)
+      ? locked.filter(id => id !== lessonId)
+      : [...locked, lessonId];
+    updateKid(kidIdx, { lockedLessons: newLocked });
+  };
+
   return (
-    <div className="mt-6 space-y-4 bg-white p-6 rounded-2xl border border-stone-200">
-      <h3 className="font-display text-lg mb-4">Gestion des accès enfants</h3>
-      {draft.kids.map((kid, idx) => (
-        <div key={kid.id} className="flex items-center justify-between border-b border-stone-100 py-3 text-sm">
-          <div>
-            <span className="font-bold text-stone-800">{kid.name}</span>
-            <span className="text-xs text-stone-400 ml-2">({kid.grade}e année)</span>
+    <div className="mt-6 space-y-6">
+      {draft.kids.map((kid, idx) => {
+        const gradeData = CURRICULUM.find(g => g.grade === kid.grade);
+        const locked = kid.lockedLessons || [];
+        return (
+          <div key={kid.id} className="bg-white p-6 rounded-2xl border border-stone-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg text-stone-900">Profil {idx + 1}</h3>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={kid.enabled !== false}
+                  onChange={e => updateKid(idx, { enabled: e.target.checked })} />
+                <span className="text-xs font-bold text-stone-500">Profil actif</span>
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="col-span-2">
+                <label className="text-xs font-bold text-stone-400 uppercase block mb-1">Prénom</label>
+                <input type="text" value={kid.name}
+                  onChange={e => updateKid(idx, { name: e.target.value })}
+                  placeholder="Prénom de l'enfant"
+                  className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-stone-400" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-stone-400 uppercase block mb-1">Âge</label>
+                <input type="number" min="4" max="16" value={kid.age || ''}
+                  onChange={e => updateKid(idx, { age: parseInt(e.target.value) || 0 })}
+                  className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-stone-400" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-stone-400 uppercase block mb-1">Niveau scolaire</label>
+                <select value={kid.grade}
+                  onChange={e => updateKid(idx, { grade: parseInt(e.target.value) })}
+                  className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-stone-400">
+                  <option value={1}>1re année</option>
+                  <option value={2}>2e année</option>
+                  <option value={3}>3e année</option>
+                  <option value={4}>4e année</option>
+                </select>
+              </div>
+            </div>
+            {kid.grade < 4 && (
+              <button onClick={() => updateKid(idx, { grade: kid.grade + 1 })}
+                className="text-xs font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl active:scale-95 mb-4 transition-all hover:bg-indigo-100">
+                Passer en {kid.grade + 1}e année →
+              </button>
+            )}
+            {gradeData && (
+              <details className="mt-2">
+                <summary className="text-xs font-bold text-stone-400 uppercase cursor-pointer select-none py-1">
+                  Verrouiller / Déverrouiller des leçons
+                </summary>
+                <div className="mt-3 space-y-3">
+                  {gradeData.units.map(unit => (
+                    <div key={unit.id}>
+                      <div className="text-xs font-bold text-stone-500 mb-1">{unit.name}</div>
+                      <div className="space-y-1">
+                        {unit.lessons.map(lesson => {
+                          const isLocked = locked.includes(lesson.id);
+                          return (
+                            <button key={lesson.id}
+                              onClick={() => toggleLessonLock(idx, lesson.id)}
+                              className={`w-full text-left text-xs px-3 py-2 rounded-lg flex items-center justify-between border transition-colors ${isLocked ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'}`}>
+                              <span>{lesson.name}</span>
+                              <span className="font-bold">{isLocked ? '🔒 Bloqué' : '🔓 Libre'}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={kid.enabled !== false} onChange={(e) => {
-              const updatedKids = [...draft.kids];
-              updatedKids[idx].enabled = e.target.checked;
-              const newConfig = { ...draft, kids: updatedKids };
-              setDraft(newConfig); onUpdate(newConfig);
-            }} />
-            <span className="text-xs font-bold text-stone-500">Activer le profil</span>
-          </label>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -6907,7 +6988,7 @@ export default function App() {
       `}</style>
       
       {screen === 'home' && <KidPicker config={config} progress={progress} stars={stars} onPickKid={k => { setActiveKid(k); setScreen('curriculum'); }} onPickParent={() => setScreen('parentgate')} />}
-      {screen === 'curriculum' && activeKid && <CurriculumPath kid={activeKid} progress={progress} onPickLesson={(l) => { setActiveLesson(l); setScreen('lesson'); }} onBack={() => setScreen('home')} />}
+      {screen === 'curriculum' && activeKid && <CurriculumPath kid={config.kids.find(k => k.id === activeKid.id) || activeKid} progress={progress} onPickLesson={(l) => { setActiveLesson(l); setScreen('lesson'); }} onBack={() => setScreen('home')} />}
       {screen === 'lesson' && activeKid && activeLesson && <LessonView lesson={activeLesson} kid={activeKid} onComplete={handleLessonComplete} onExit={() => setScreen('curriculum')} />}
       {screen === 'parentgate' && <ParentGate pin={config.parentPin || '1234'} onSuccess={() => setScreen('parentdash')} onBack={() => setScreen('home')} />}
       {screen === 'parentdash' && <ParentDashboard config={config} sessions={sessions} progress={progress} onUpdateConfig={async (c) => { await saveConfig(c); setConfig(c); }} onResetProgress={async () => { await saveProgress({}); setProgress({}); }} onBack={() => setScreen('home')} />}
