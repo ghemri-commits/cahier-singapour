@@ -501,10 +501,15 @@ function Scratchpad() {
 // ═══════════════════════════════════════════════════════════════
 function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
   const [query,   setQuery]   = useState('');
+  const GREETING = "Bonjour ! Je suis Émile, ton guide de maths du Québec. Comment puis-je t'aider aujourd'hui ?";
   const [history, setHistory] = useState([
-    { role: 'assistant', text: "Bonjour ! Je suis Émile, ton guide de maths du Québec. Comment puis-je t'aider aujourd'hui ?" }
+    { role: 'assistant', text: GREETING }
   ]);
   const [loading, setLoading] = useState(false);
+
+  const speakEmile = (text) => speakVoice(stripMd(text).slice(0, 350));
+
+  useEffect(() => { speakEmile(GREETING); }, []);
 
   const askEmile = async (prompt) => {
     const text = prompt || query;
@@ -514,7 +519,9 @@ function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
     setLoading(true);
 
     if (!config.geminiApiKey) {
-      setHistory(h => [...h, { role: 'assistant', text: "⚠️ Configure ta clé API Gemini dans le panneau Parent pour activer mon IA !" }]);
+      const msg = "⚠️ Configure ta clé API Gemini dans le panneau Parent pour activer mon IA !";
+      setHistory(h => [...h, { role: 'assistant', text: msg }]);
+      speakEmile(msg);
       setLoading(false);
       return;
     }
@@ -537,7 +544,7 @@ function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
         const data  = await res.json();
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Je n'ai pas compris, peux-tu répéter ?";
         setHistory(h => [...h, { role: 'assistant', text: reply }]);
-        speakVoice(reply);
+        speakEmile(reply);
         break;
       }
     } catch(e) {
@@ -551,7 +558,12 @@ function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
         {history.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded-2xl p-3 shadow-sm text-sm leading-relaxed ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'}`}>
-              {msg.role === 'assistant' && <span className="font-bold block text-xs text-sky-600 mb-1">🦉 ÉMILE</span>}
+              {msg.role === 'assistant' && (
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-xs text-sky-600">🦉 ÉMILE</span>
+                  <button onClick={() => speakEmile(msg.text)} className="text-sky-400 hover:text-sky-600 text-xs ml-2" title="Écouter">🔊</button>
+                </div>
+              )}
               <p style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
             </div>
           </div>
@@ -577,6 +589,33 @@ function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
     </div>
   );
 }
+
+const SUCCESS_MSGS = [
+  'Wow ! Bonne réponse ! Quel talent !',
+  'Bravo ! Tu es vraiment fort en maths !',
+  'Excellent ! Continue comme ça !',
+  'Super ! Tu as tout compris !',
+  'Parfait ! Émile est fier de toi !',
+  'Incroyable ! Tu es une étoile des maths !',
+  'Génial ! Quelle belle réponse !',
+  'Magnifique ! Tu progresses très bien !',
+  'Ouah ! C\'est exactement ça !',
+  'Félicitations ! Tu es imbattable !',
+  'C\'est ça ! Tu es un champion des maths !',
+  'Époustouflant ! Tu y es arrivé !',
+];
+const ERROR_MSGS = [
+  "Ce n'est pas tout à fait ça. Essaie encore ou demande un indice !",
+  "Presque ! Regarde bien l'indice et réessaie.",
+  "Oups ! Pas encore, mais tu vas y arriver !",
+  "Hmm, ce n'est pas ça. Réfléchis bien et réessaie !",
+  "Courage ! La bonne réponse est juste là.",
+  "Continue d'essayer ! Tu te rapproches !",
+  "Essaie encore ! Chaque erreur t'aide à apprendre.",
+  "Pas encore, mais tu peux demander un indice à Émile !",
+];
+const stripMd = t => t.replace(/\*\*?([^*]+)\*\*?/g, '$1').replace(/#+\s/g, '').replace(/`[^`]*`/g, '').trim();
+const rndMsg = arr => arr[Math.floor(Math.random() * arr.length)];
 
 // ═══════════════════════════════════════════════════════════════
 // LESSON VIEW
@@ -625,10 +664,10 @@ function LessonView({ lesson, onComplete, onExit, speakVoice, setAssistantOpen }
 
     if (ok) {
       setResult('success'); playSound('correct');
-      speakVoice('Wow ! Bonne réponse ! Quel talent !');
+      speakVoice(rndMsg(SUCCESS_MSGS));
     } else {
       setResult('error'); setShakeKey(k => k + 1); playSound('wrong');
-      speakVoice("Ce n'est pas tout à fait ça. Essaie encore ou demande un indice !");
+      speakVoice(rndMsg(ERROR_MSGS));
     }
   };
 
