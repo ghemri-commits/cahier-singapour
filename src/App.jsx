@@ -3,7 +3,10 @@
 // v3.0 · 6 niveaux · 4 leçons par niveau · IA Émile · ElevenLabs
 // ═══════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CURRICULUM } from './curriculum.js';
+import { CURRICULUM_1_3 } from './curriculum-1-3.js';
+import { CURRICULUM_4_6 } from './curriculum-4-6.js';
+
+const CURRICULUM = { ...CURRICULUM_1_3, ...CURRICULUM_4_6 };
 
 const KEY_CONFIG   = 'cahier:config';
 const KEY_PROGRESS = 'singapour:progress';
@@ -31,7 +34,7 @@ const DEFAULT_CONFIG = {
   elevenLabsApiKey: '',
   elevenLabsVoiceId: 'NW7MRm1Ibz4gwivTc7oV',
   geminiApiKey: '',
-  geminiModel: 'gemini-2.5-flash',
+  geminiModel: 'gemini-2.5-flash-preview-04-17',
 };
 
 const SYSTEM_PROMPT_EMILE = `Tu es "Émile", un tuteur bienveillant expert en mathématiques pour le primaire au Québec.
@@ -516,7 +519,7 @@ function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
       return;
     }
 
-    const model      = config.geminiModel || 'gemini-2.5-flash';
+    const model      = config.geminiModel || 'gemini-2.5-flash-preview-04-17';
     const kidProfile = `Élève : ${activeKid.name}, ${activeKid.grade + 5} ans, ${activeKid.grade}e année au Québec.`;
     const lessonCtx  = activeLesson ? `Leçon : ${activeLesson.title} — ${activeLesson.desc}` : "Aucune leçon active.";
     const fullPrompt = `${kidProfile}\n${lessonCtx}\nQuestion : "${text}"`;
@@ -1002,7 +1005,7 @@ function ParentDashboard({ config, progress, onSave, onBack }) {
   const [elKey,       setElKey]       = useState(config.elevenLabsApiKey || '');
   const [elVoice,     setElVoice]     = useState(config.elevenLabsVoiceId || 'NW7MRm1Ibz4gwivTc7oV');
   const [geminiKey,   setGeminiKey]   = useState(config.geminiApiKey || '');
-  const [geminiModel, setGeminiModel] = useState(config.geminiModel || 'gemini-2.5-flash');
+  const [geminiModel, setGeminiModel] = useState(config.geminiModel || 'gemini-2.5-flash-preview-04-17');
 
   const save = () => onSave({ ...config, kids, parentPin, elevenLabsApiKey: elKey, elevenLabsVoiceId: elVoice, geminiApiKey: geminiKey, geminiModel });
 
@@ -1113,7 +1116,7 @@ function ParentDashboard({ config, progress, onSave, onBack }) {
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-500 uppercase">Modèle d'IA</label>
                 <div className="flex gap-3">
-                  {[['gemini-2.5-flash','⚡ Rapide','Réponses instantanées'],['gemini-2.5-pro','🧠 Avancé','Meilleur raisonnement']].map(([id, label, desc]) => (
+                  {[['gemini-2.5-flash-preview-04-17','⚡ Flash 2.5','Rapide et gratuit'],['gemini-2.5-pro-preview-06-05','🧠 Pro 2.5','Meilleur raisonnement']].map(([id, label, desc]) => (
                     <button key={id} onClick={() => setGeminiModel(id)}
                       className={`flex-1 p-3 rounded-2xl border-2 text-left transition-all ${geminiModel === id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}>
                       <p className="font-extrabold text-sm text-slate-800">{label}</p>
