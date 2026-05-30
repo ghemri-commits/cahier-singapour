@@ -533,6 +533,7 @@ function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
 
     try {
       let delay = 1000;
+      let replied = false;
       for (let i = 0; i < 5; i++) {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`, {
           method: 'POST',
@@ -540,15 +541,27 @@ function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
           body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }], systemInstruction: { parts: [{ text: SYSTEM_PROMPT_EMILE }] } })
         });
         if (res.status === 429) { await new Promise(r => setTimeout(r, delay)); delay *= 2; continue; }
+        if (res.status === 403 || res.status === 401) throw new Error('INVALID_KEY');
+        if (res.status === 404) throw new Error('MODEL_NOT_FOUND');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data  = await res.json();
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Je n'ai pas compris, peux-tu répéter ?";
         setHistory(h => [...h, { role: 'assistant', text: reply }]);
         speakEmile(reply);
+        replied = true;
         break;
       }
+      if (!replied) {
+        const msg = "Émile est très occupé en ce moment. Réessaie dans quelques secondes !";
+        setHistory(h => [...h, { role: 'assistant', text: msg }]);
+      }
     } catch(e) {
-      setHistory(h => [...h, { role: 'assistant', text: "Oups ! Émile a eu un petit problème. Réessaie !" }]);
+      const msg = e.message === 'INVALID_KEY'
+        ? "🔑 Clé API Gemini invalide. Vérifie-la dans le panneau Parent !"
+        : e.message === 'MODEL_NOT_FOUND'
+        ? "⚠️ Modèle Gemini introuvable. Vérifie le nom du modèle dans Paramètres."
+        : "Oups ! Émile a eu un petit problème de connexion. Réessaie !";
+      setHistory(h => [...h, { role: 'assistant', text: msg }]);
     } finally { setLoading(false); }
   };
 
