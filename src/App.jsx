@@ -742,24 +742,32 @@ function LessonView({ lesson, onComplete, onExit, speakVoice, setAssistantOpen }
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3 justify-center">
               {[[2,'2 $'],[1,'1 $'],[0.25,'25 ¢'],[0.10,'10 ¢'],[0.05,'5 ¢']].map(([val, label]) => (
-                <button key={val} onClick={() => setMoneyItems(m => [...m, val])}
+                <button key={val} onClick={() => { setMoneyItems(m => [...m, val]); setResult(null); }}
                   className="w-16 h-16 rounded-full bg-amber-100 border-4 border-amber-400 flex items-center justify-center font-bold text-xs text-slate-800 shadow hover:scale-105 transition-all touch-target">
                   {label}
                 </button>
               ))}
             </div>
-            <div className="p-3 bg-white border border-slate-200 rounded-xl min-h-[56px] flex flex-wrap gap-2 items-center justify-center">
-              {moneyItems.length === 0 ? <span className="text-xs text-slate-400">Dépose tes pièces ici</span> : null}
+            <div className="p-3 bg-white border border-slate-200 rounded-xl min-h-[64px] flex flex-wrap gap-2 items-center justify-center">
+              {moneyItems.length === 0 ? <span className="text-xs text-slate-400">Appuie sur une pièce pour l'ajouter ici</span> : null}
               {moneyItems.map((v, i) => (
-                <div key={i} className="bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 text-xs font-bold flex items-center">
-                  💵 {v < 1 ? `${Math.round(v * 100)} ¢` : `${v} $`}
-                  <button onClick={() => setMoneyItems(m => m.filter((_,j) => j !== i))} className="ml-1.5 text-red-500 font-bold">✕</button>
-                </div>
+                <button key={i}
+                  onClick={() => { setMoneyItems(m => m.filter((_,j) => j !== i)); setResult(null); }}
+                  className="bg-amber-50 border-2 border-amber-300 rounded-2xl px-3 py-2 text-sm font-bold flex items-center space-x-1 touch-target hover:bg-rose-50 hover:border-rose-400 active:scale-95 transition-all">
+                  <span>💵 {v < 1 ? `${Math.round(v * 100)} ¢` : `${v} $`}</span>
+                  <span className="text-rose-500 font-extrabold text-base leading-none">✕</span>
+                </button>
               ))}
             </div>
-            <div className="text-center">
-              <span className="text-sm font-extrabold text-slate-700">Total : </span>
-              <span className={`text-lg font-extrabold ${Math.abs(moneyTotal - q.answer) < 0.005 ? 'text-emerald-600' : 'text-indigo-700'}`}>{moneyTotal.toFixed(2)} $</span>
+            <div className="flex items-center justify-between">
+              <button onClick={() => { setMoneyItems([]); setResult(null); }}
+                className="px-3 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold touch-target">
+                🗑️ Tout effacer
+              </button>
+              <div className="text-center">
+                <span className="text-sm font-extrabold text-slate-700">Total : </span>
+                <span className={`text-lg font-extrabold ${Math.abs(moneyTotal - q.answer) < 0.005 ? 'text-emerald-600' : 'text-indigo-700'}`}>{moneyTotal.toFixed(2)} $</span>
+              </div>
             </div>
           </div>
         )}
