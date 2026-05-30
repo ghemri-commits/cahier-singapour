@@ -357,7 +357,7 @@ export const CURRICULUM_1_3 = {
           {q:"Arrondi à la centaine : 342 →", options:[{id:'a',text:'300'},{id:'b',text:'340'},{id:'c',text:'350'},{id:'d',text:'400'}], answer:'a', help:"342 : chiffre des dizaines = 4 < 5, on arrondit à 300."},
           {q:"Arrondi à la centaine : 678 →", options:[{id:'a',text:'600'},{id:'b',text:'670'},{id:'c',text:'680'},{id:'d',text:'700'}], answer:'d', help:"678 : dizaines = 7 ≥ 5, on arrondit à 700."},
           {q:"Estime : 48 + 31 ≈ (arrondis à la dizaine)", options:[{id:'a',text:'70'},{id:'b',text:'80'},{id:'c',text:'90'},{id:'d',text:'75'}], answer:'b', help:"50 + 30 = 80."},
-          {q:"Estime : 62 − 29 ≈ (arrondis à la dizaine)", options:[{id:'a',text:'20'},{id:'b',text:'30'},{id:'c',text:'40'},{id:'d',text:'50'}], answer:'c', help:"60 − 30 = 30... mais 60 − 29 ≈ 30 → choisir 30. Attends : 62→60, 29→30 → 60−30=30."},
+          {q:"Estime : 62 − 29 ≈ (arrondis à la dizaine)", options:[{id:'a',text:'20'},{id:'b',text:'30'},{id:'c',text:'40'},{id:'d',text:'50'}], answer:'b', help:"62→60, 29→30 → 60−30=30."},
           {q:"Arrondi à la dizaine : 95 →", options:[{id:'a',text:'90'},{id:'b',text:'95'},{id:'c',text:'100'},{id:'d',text:'105'}], answer:'c', help:"95 : unités = 5 ≥ 5 → 100."},
           {q:"Arrondi à la centaine : 450 →", options:[{id:'a',text:'400'},{id:'b',text:'500'},{id:'c',text:'450'},{id:'d',text:'460'}], answer:'b', help:"450 : dizaines = 5 ≥ 5 → 500."},
           {q:"Estime : 198 + 203 ≈ (arrondis à la centaine)", options:[{id:'a',text:'300'},{id:'b',text:'350'},{id:'c',text:'400'},{id:'d',text:'450'}], answer:'c', help:"200 + 200 = 400."},
