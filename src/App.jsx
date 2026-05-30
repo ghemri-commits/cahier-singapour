@@ -541,9 +541,14 @@ function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
           body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }], systemInstruction: { parts: [{ text: SYSTEM_PROMPT_EMILE }] } })
         });
         if (res.status === 429) { await new Promise(r => setTimeout(r, delay)); delay *= 2; continue; }
-        if (res.status === 403 || res.status === 401) throw new Error('INVALID_KEY');
-        if (res.status === 404) throw new Error('MODEL_NOT_FOUND');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          let googleMsg = '';
+          try { googleMsg = (await res.json())?.error?.message || ''; } catch(_) {}
+          const label = googleMsg || `HTTP ${res.status}`;
+          if (res.status === 403 || res.status === 401) throw new Error(`🔑 Clé API invalide : ${label}`);
+          if (res.status === 404) throw new Error(`⚠️ Modèle introuvable : ${label}`);
+          throw new Error(`❌ Erreur Gemini : ${label}`);
+        }
         const data  = await res.json();
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Je n'ai pas compris, peux-tu répéter ?";
         setHistory(h => [...h, { role: 'assistant', text: reply }]);
@@ -552,15 +557,14 @@ function AssistantPanel({ activeKid, activeLesson, speakVoice, config }) {
         break;
       }
       if (!replied) {
-        const msg = "Émile est très occupé en ce moment. Réessaie dans quelques secondes !";
+        const msg = "Émile est très occupé en ce moment (trop de requêtes). Réessaie dans 30 secondes !";
         setHistory(h => [...h, { role: 'assistant', text: msg }]);
       }
     } catch(e) {
-      const msg = e.message === 'INVALID_KEY'
-        ? "🔑 Clé API Gemini invalide. Vérifie-la dans le panneau Parent !"
-        : e.message === 'MODEL_NOT_FOUND'
-        ? "⚠️ Modèle Gemini introuvable. Vérifie le nom du modèle dans Paramètres."
-        : "Oups ! Émile a eu un petit problème de connexion. Réessaie !";
+      console.error('Émile error:', e);
+      const msg = e.message.startsWith('🔑') || e.message.startsWith('⚠️') || e.message.startsWith('❌')
+        ? e.message
+        : `🌐 Erreur de connexion : vérifie ton internet ou ta clé Gemini dans le panneau Parent.`;
       setHistory(h => [...h, { role: 'assistant', text: msg }]);
     } finally { setLoading(false); }
   };
